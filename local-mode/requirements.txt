@@ -1,0 +1,2 @@
+cryptography>=42.0.0
+pyjwt[crypto]>=2.8.0

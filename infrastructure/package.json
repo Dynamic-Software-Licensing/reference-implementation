@@ -1,0 +1,21 @@
+{
+  "name": "dsl-reference-infrastructure",
+  "version": "1.0.0",
+  "description": "CDK infrastructure for DSL Reference Implementation",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.150.0"
+  }
+}

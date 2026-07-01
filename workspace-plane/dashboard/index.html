@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Software Licensing — Interactive Demo</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Dynamic Software Licensing — Interactive Demo</h1>
+        <p class="subtitle">Chapters 7 &amp; 10 — Reference Implementation</p>
+        <div class="config-bar">
+            <label>Control Plane <span class="info-icon" data-term="control-plane"></span> URL:
+                <input id="api-url-input" type="text" value="http://localhost:3000" class="url-input">
+            </label>
+            <button class="btn btn-muted" onclick="updateApiUrl()">Connect</button>
+            <span id="connection-status" class="status-disconnected">Not connected</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Architecture Diagram -->
+        <section class="architecture">
+            <svg viewBox="0 0 880 160" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:940px;height:auto;">
+                <!-- Workspace Plane box (narrower, moved left) -->
+                <rect x="10" y="10" width="420" height="140" rx="8" fill="#1e293b" stroke="#22c55e44" stroke-width="2"/>
+                <text x="24" y="32" font-family="sans-serif" font-size="11" font-weight="700" fill="#22c55e" letter-spacing="1">WORKSPACE PLANE</text>
+                <!-- Application (left) -->
+                <rect x="30" y="46" width="170" height="88" rx="6" fill="#334155" stroke="#475569" stroke-width="1"/>
+                <text x="115" y="76" font-family="sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">Media Function</text>
+                <text x="115" y="96" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">Encoder / Multiviewer</text>
+                <text x="115" y="112" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">(simulated)</text>
+                <!-- Token arrow (agent delivers token to app) -->
+                <line x1="202" y1="90" x2="248" y2="90" stroke="#475569" stroke-width="1.5"/>
+                <polygon points="204,86 196,90 204,94" fill="#475569"/>
+                <text x="225" y="83" font-family="sans-serif" font-size="10" fill="#64748b" text-anchor="middle">token</text>
+                <!-- License Broker (right within workspace plane) -->
+                <rect x="250" y="46" width="164" height="88" rx="6" fill="#334155" stroke="#475569" stroke-width="1"/>
+                <text x="332" y="76" font-family="sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">License Broker</text>
+                <text x="332" y="96" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">Identity, renewal, usage</text>
+                <text x="332" y="112" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">reporting, grace enforcement</text>
+                <!-- REST/WebSocket arrow (fully between the two planes) -->
+                <line x1="440" y1="86" x2="570" y2="86" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3"/>
+                <polygon points="568,82 576,86 568,90" fill="#3b82f6"/>
+                <polygon points="442,82 434,86 442,90" fill="#3b82f6"/>
+                <text x="505" y="76" font-family="sans-serif" font-size="10" fill="#3b82f6" text-anchor="middle">REST / WebSocket</text>
+                <!-- Control Plane box -->
+                <rect x="580" y="10" width="290" height="140" rx="8" fill="#1e293b" stroke="#3b82f644" stroke-width="2"/>
+                <text x="593" y="32" font-family="sans-serif" font-size="11" font-weight="700" fill="#3b82f6" letter-spacing="1">CONTROL PLANE</text>
+                <rect x="600" y="46" width="250" height="88" rx="6" fill="#334155" stroke="#475569" stroke-width="1"/>
+                <text x="725" y="72" font-family="sans-serif" font-size="13" font-weight="700" fill="#e2e8f0" text-anchor="middle">Control Plane</text>
+                <text x="725" y="92" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">Entitlements, lease lifecycle,</text>
+                <text x="725" y="107" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">token signing, usage metering,</text>
+                <text x="725" y="122" font-family="sans-serif" font-size="10" fill="#94a3b8" text-anchor="middle">policy enforcement</text>
+            </svg>
+        </section>
+
+        <!-- Controls -->
+        <section class="scenarios">
+            <h2>Scenarios</h2>
+            <div class="speed-controls">
+                <label>Speed: <input type="range" min="0.5" max="2" step="0.25" value="1" oninput="setSpeed(this.value)"></label>
+                <span id="speed-value">Normal</span>
+                <label>Identity <span class="info-icon" data-term="identity-evidence"></span>:
+                    <select id="identity-mode" class="select-input">
+                        <option value="aws">AWS (IAM Role)</option>
+                        <option value="kubernetes">Kubernetes (Service Account)</option>
+                        <option value="spiffe">SPIFFE/SPIRE (Cross-platform)</option>
+                        <option value="certificate">X.509 Certificate (On-prem)</option>
+                    </select>
+                </label>
+                <button id="step-toggle" class="btn btn-muted" onclick="toggleStepMode()">Step Mode: OFF</button>
+                <button id="next-btn" class="btn btn-primary" onclick="nextStep()" style="display:none">Next Step</button>
+            </div>
+            <div class="scenario-buttons">
+                <button onclick="runScenario('issue-a')" class="btn btn-primary">1. Issue Lease (Encoder)</button>
+                <button onclick="runScenario('issue-b')" class="btn btn-secondary">2. Issue Lease (Multiviewer)</button>
+                <label class="target-label">Target:
+                    <select id="target-app" class="select-input">
+                        <option value="a">Encoder</option>
+                        <option value="b">Multiviewer</option>
+                    </select>
+                </label>
+                <button onclick="runScenario('renew')" class="btn btn-info">3. Renew</button>
+                <button onclick="runScenario('exceed-quota')" class="btn btn-quota">4. Exceed Quota</button>
+                <button onclick="runScenario('wrong-identity')" class="btn btn-warning">5. Wrong Identity</button>
+                <button onclick="runScenario('failover')" class="btn btn-primary">6. Failover Auto-Mobility</button>
+                <button onclick="runScenario('airgap')" class="btn btn-airgap">7. Air Gap</button>
+                <button onclick="runScenario('revoke')" class="btn btn-danger">8. Revoke</button>
+                <button onclick="runScenario('reset')" class="btn btn-reset">Reset</button>
+            </div>
+            <div class="airgap-config">
+                <label>Grace Period <span class="info-icon" data-term="grace-period"></span>: <input id="grace-seconds" type="number" value="30" min="5" max="300" class="num-input">s</label>
+                <label>Exhaustion:
+                    <select id="exhaustion-action" class="select-input">
+                        <option value="DRAIN">DRAIN (finish work, refuse new)</option>
+                        <option value="DEGRADE">DEGRADE (reduced functionality)</option>
+                        <option value="STOP">STOP (immediate halt)</option>
+                    </select>
+                </label>
+                <label>Reconnect at: <input id="reconnect-pct" type="number" value="60" min="0" max="100" class="num-input">% <span class="hint">(100% = never reconnect)</span></label>
+            </div>
+        </section>
+
+        <!-- Narrative Panel -->
+        <section class="narrative" id="narrative">
+            <div class="narrative-step">
+                <strong>Welcome.</strong> This demo shows how the DSL best practices work in practice.
+                Click a scenario above to begin. Each step shows what the License Broker <span class="info-icon" data-term="license-broker"></span> sends,
+                what the Control Plane does, and what the Media Function <span class="info-icon" data-term="application"></span> receives.
+            </div>
+        </section>
+
+        <!-- Two-Column ISV Applications -->
+        <div class="isv-columns">
+
+            <!-- ISV A: Encoder -->
+            <div class="isv-column" id="isv-a-col">
+                <div class="isv-header isv-a-header">
+                    <span class="isv-badge">ISV A</span>
+                    <strong>Encoder</strong>
+                    <span class="isv-product">app-encoder-pro</span>
+                </div>
+                <div class="isv-summary">
+                    <div class="isv-field"><label>Dimensions</label><span>4 channels, 60 FPS</span></div>
+                    <div class="isv-field"><label>Max Leases</label><span>2</span></div>
+                    <div class="isv-field"><label>Active</label><span id="a-active">0</span></div>
+                    <div class="isv-field"><label>Lease <span class="info-icon" data-term="lease-id"></span></label><span id="a-lease-id" class="mono">—</span></div>
+                    <div class="isv-field"><label>Status</label><span id="a-status" class="status-badge status-none">No lease</span></div>
+                </div>
+                <div class="isv-panels">
+                    <div class="isv-panel">
+                        <h3>Identity Evidence <span class="info-icon" data-term="identity-evidence"></span></h3>
+                        <pre id="a-identity" class="code-block">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>API Call</h3>
+                        <div class="api-label">REQUEST</div>
+                        <pre id="a-api-req" class="code-block">—</pre>
+                        <div class="api-label">RESPONSE</div>
+                        <pre id="a-api-res" class="code-block">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Token <span class="info-icon" data-term="token"></span> / Claims <span class="info-icon" data-term="claims"></span></h3>
+                        <pre id="a-token" class="code-block token-claims-bg">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Event Log</h3>
+                        <div id="a-log" class="event-log"></div>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Grace Period <span class="info-icon" data-term="grace-period"></span></h3>
+                        <div id="a-grace">
+                            <div class="grace-label">Normal</div>
+                            <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+                            <div class="grace-countdown">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ISV B: Multiviewer -->
+            <div class="isv-column" id="isv-b-col">
+                <div class="isv-header isv-b-header">
+                    <span class="isv-badge">ISV B</span>
+                    <strong>Multiviewer</strong>
+                    <span class="isv-product">app-multiviewer</span>
+                </div>
+                <div class="isv-summary">
+                    <div class="isv-field"><label>Dimensions</label><span>10 channels, 5 mosaics</span></div>
+                    <div class="isv-field"><label>Max Leases</label><span>1</span></div>
+                    <div class="isv-field"><label>Active</label><span id="b-active">0</span></div>
+                    <div class="isv-field"><label>Lease <span class="info-icon" data-term="lease-id"></span></label><span id="b-lease-id" class="mono">—</span></div>
+                    <div class="isv-field"><label>Status</label><span id="b-status" class="status-badge status-none">No lease</span></div>
+                </div>
+                <div class="isv-panels">
+                    <div class="isv-panel">
+                        <h3>Identity Evidence <span class="info-icon" data-term="identity-evidence"></span></h3>
+                        <pre id="b-identity" class="code-block">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>API Call</h3>
+                        <div class="api-label">REQUEST</div>
+                        <pre id="b-api-req" class="code-block">—</pre>
+                        <div class="api-label">RESPONSE</div>
+                        <pre id="b-api-res" class="code-block">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Token <span class="info-icon" data-term="token"></span> / Claims <span class="info-icon" data-term="claims"></span></h3>
+                        <pre id="b-token" class="code-block token-claims-bg">—</pre>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Event Log</h3>
+                        <div id="b-log" class="event-log"></div>
+                    </div>
+                    <div class="isv-panel">
+                        <h3>Grace Period <span class="info-icon" data-term="grace-period"></span></h3>
+                        <div id="b-grace">
+                            <div class="grace-label">Normal</div>
+                            <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+                            <div class="grace-countdown">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Observability Panel -->
+        <section class="observability" id="observability-section">
+            <h2>License Observability <span class="info-icon" data-term="entitlement"></span></h2>
+            <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+                <button class="btn btn-muted" onclick="refreshObservability()">Refresh</button>
+                <button class="btn btn-muted" onclick="toggleAutoRefresh()">Auto-refresh: <span id="auto-refresh-label">OFF</span></button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                <!-- Encoder Card -->
+                <div style="border:1px solid #334155;border-radius:8px;overflow:hidden;">
+                    <div style="padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:600;background:rgba(139,92,246,0.1);border-bottom:2px solid #8b5cf6;color:#8b5cf6;">Encoder (ISV A) — app-encoder-pro</div>
+                    <div style="padding:0.75rem;">
+                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;font-size:0.75rem;">
+                            <span style="min-width:80px;color:#94a3b8;">Lease Slots</span>
+                            <div style="flex:1;height:10px;background:#0f172a;border-radius:5px;overflow:hidden;max-width:140px;"><div id="obs-enc-bar" style="height:100%;background:#22c55e;border-radius:5px;width:0%;transition:width 0.3s;"></div></div>
+                            <span id="obs-enc-slots" style="font-weight:600;">0 / 2 used</span>
+                        </div>
+                        <div style="display:flex;gap:1rem;font-size:0.75rem;margin-bottom:0.5rem;">
+                            <span><span style="color:#94a3b8;">Available:</span> <strong id="obs-enc-avail">2</strong></span>
+                            <span><span style="color:#94a3b8;">Modality:</span> <strong id="obs-enc-modality">—</strong></span>
+                        </div>
+                        <div id="obs-enc-leases" style="font-size:0.7rem;color:#94a3b8;">No active leases</div>
+                    </div>
+                </div>
+                <!-- Multiviewer Card -->
+                <div style="border:1px solid #334155;border-radius:8px;overflow:hidden;">
+                    <div style="padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:600;background:rgba(6,182,212,0.1);border-bottom:2px solid #06b6d4;color:#06b6d4;">Multiviewer (ISV B) — app-multiviewer</div>
+                    <div style="padding:0.75rem;">
+                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;font-size:0.75rem;">
+                            <span style="min-width:80px;color:#94a3b8;">Lease Slots</span>
+                            <div style="flex:1;height:10px;background:#0f172a;border-radius:5px;overflow:hidden;max-width:140px;"><div id="obs-mv-bar" style="height:100%;background:#22c55e;border-radius:5px;width:0%;transition:width 0.3s;"></div></div>
+                            <span id="obs-mv-slots" style="font-weight:600;">0 / 1 used</span>
+                        </div>
+                        <div style="display:flex;gap:1rem;font-size:0.75rem;margin-bottom:0.5rem;">
+                            <span><span style="color:#94a3b8;">Available:</span> <strong id="obs-mv-avail">1</strong></span>
+                            <span><span style="color:#94a3b8;">Modality:</span> <strong id="obs-mv-modality">—</strong></span>
+                        </div>
+                        <div id="obs-mv-leases" style="font-size:0.7rem;color:#94a3b8;">No active leases</div>
+                    </div>
+                </div>
+            </div>
+            <div style="border-top:1px solid #334155;padding-top:0.75rem;">
+                <h3>Recent Activity</h3>
+                <div id="obs-activity-log" style="max-height:150px;overflow-y:auto;">
+                    <div style="color:#94a3b8;font-size:0.75rem;">No activity yet — issue a lease to see data here</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/glossary.js?v=6"></script>
+    <script src="js/demo.js?v=6"></script>
+</body>
+</html>

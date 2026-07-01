@@ -1,0 +1,64 @@
+{
+  "entitlements": [
+    {
+      "PK": "TENANT#tenant-broadcaster-1",
+      "SK": "APP#app-encoder-pro#ISV#isv-acme",
+      "tenantId": "tenant-broadcaster-1",
+      "appId": "app-encoder-pro",
+      "isvId": "isv-acme",
+      "dimensions": [
+        { "name": "maxChannels", "maxQuantity": 4 },
+        { "name": "maxFps", "maxQuantity": 60 }
+      ],
+      "maxLeases": 2,
+      "activeLeases": 0,
+      "licenseModality": "hourly",
+      "policy": {
+        "heartbeatSeconds": 30,
+        "renewBeforeSeconds": 60,
+        "offlineGraceSeconds": 300,
+        "onGraceExhausted": "DRAIN"
+      }
+    },
+    {
+      "PK": "TENANT#tenant-broadcaster-1",
+      "SK": "APP#app-multiviewer#ISV#isv-globex",
+      "tenantId": "tenant-broadcaster-1",
+      "appId": "app-multiviewer",
+      "isvId": "isv-globex",
+      "dimensions": [
+        { "name": "maxChannels", "maxQuantity": 10 },
+        { "name": "maxMosaics", "maxQuantity": 5 }
+      ],
+      "maxLeases": 1,
+      "activeLeases": 0,
+      "licenseModality": "daily",
+      "policy": {
+        "heartbeatSeconds": 30,
+        "renewBeforeSeconds": 60,
+        "offlineGraceSeconds": 300,
+        "onGraceExhausted": "DRAIN"
+      }
+    },
+    {
+      "PK": "TENANT#tenant-broadcaster-2",
+      "SK": "APP#app-encoder-pro#ISV#isv-acme",
+      "tenantId": "tenant-broadcaster-2",
+      "appId": "app-encoder-pro",
+      "isvId": "isv-acme",
+      "dimensions": [
+        { "name": "maxChannels", "maxQuantity": 8 },
+        { "name": "maxFps", "maxQuantity": 30 }
+      ],
+      "maxLeases": 4,
+      "activeLeases": 0,
+      "licenseModality": "monthly",
+      "policy": {
+        "heartbeatSeconds": 30,
+        "renewBeforeSeconds": 60,
+        "offlineGraceSeconds": 600,
+        "onGraceExhausted": "DEGRADE"
+      }
+    }
+  ]
+}
